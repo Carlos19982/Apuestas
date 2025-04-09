@@ -54,7 +54,7 @@
         #ingame-stats p { margin: 0 0.5rem; } #ingame-stats strong { color: #fff; }
         #ingame-stats span { font-weight: 600; color: #facc15; }
 
-        #player-balance-display{background-color:#e6fffa;color:#2c7a7b;border:1px solid #b2f5ea;padding:.75rem 1.25rem;border-radius:8px;font-size:1.1rem;font-weight:600;margin-bottom:0.5rem; display:inline-block;box-shadow:0 2px 4px rgba(0,0,0,.05)}
+        #player-balance-display{background-color:#e6fffa;color:#2c7a7b;border:1px solid #b2f5ea;padding:.75rem 1.25rem;border-radius:8px;font-size:1.1rem;font-weight:600;margin-bottom:0.5rem; display:inline-block;box-shadow:0 2px 4px rgba(0,0,0,.05); cursor: pointer; /* Añadido para indicar que es interactivo */ }
         #round-controls{padding:1rem 0; min-height: 80px;}
         .controls-container{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:.75rem;margin-top:1rem}
         #stats-section{background-color:#edf2f7;border:1px solid #e2e8f0;color:#4a5568;padding:1rem 1.5rem;border-radius:10px;margin-top:1.5rem;text-align:left}
@@ -164,7 +164,7 @@
         <h1 class="text-4xl md:text-5xl font-bold mb-4 text-gray-900">Juego de Cartas</h1>
 
         <div class="mb-6">
-            <div id="player-balance-display">
+            <div id="player-balance-display" title="Doble clic para activar modo secreto (solo próxima partida)"> <!-- Title añadido -->
                 Saldo: <span id="player-balance" class="font-bold">5000</span> €
             </div>
         </div>
@@ -234,7 +234,8 @@
         const roundControls = document.getElementById('round-controls');
         const messageDiv = document.getElementById('message');
         const newGameBtn = document.getElementById('new-game-btn');
-        const playerBalanceDisplay = document.getElementById('player-balance');
+        const playerBalanceDisplaySpan = document.getElementById('player-balance'); // Span interno
+        const playerBalanceDisplayContainer = document.getElementById('player-balance-display'); // DIV contenedor
         const getFundsBtn = document.getElementById('get-funds-btn');
         const toggleStatsBtn = document.getElementById('toggle-stats-btn');
         const statsSection = document.getElementById('stats-section');
@@ -245,7 +246,7 @@
         const statMaxBalance = document.getElementById('stat-max-balance');
         const betSlider = document.getElementById('bet-slider');
         const betSliderValue = document.getElementById('bet-slider-value');
-        const shuffleAnimationOverlay = document.getElementById('shuffle-animation'); // Referencia al overlay
+        const shuffleAnimationOverlay = document.getElementById('shuffle-animation');
 
         // --- Estado del Juego ---
         let deck = [];
@@ -259,8 +260,8 @@
         let lastBetAmount = 10;
         let currentGameStreak = 0;
         let inRound5ChoicePhase = false;
-        let nextGameIsGuided = false;
-        let guidedGameInProgress = false;
+        let nextGameIsGuided = false; // Flag para indicar si la SIGUIENTE partida debe ser guiada
+        let guidedGameInProgress = false; // Flag para indicar si la partida ACTUAL está siendo guiada
 
         // --- Estadísticas ---
         let stats = { gamesPlayed: 0, gamesWon: 0, highestWin: 0, longestStreak: 0, maxBalance: STARTING_BALANCE };
@@ -273,7 +274,7 @@
         const ROUND_5_MULTIPLIER = 50;
         const BALANCE_LOCAL_STORAGE_KEY = 'cardGamePlayerBalance_v2';
         const STATS_LOCAL_STORAGE_KEY = 'cardGamePlayerStats_v2';
-        const SHUFFLE_ANIMATION_DURATION = 1400; // Duración total animación (0.7s * 2 iteraciones)
+        const SHUFFLE_ANIMATION_DURATION = 1400;
 
         // --- Funciones de Utilidad ---
         function getCardValue(rank) { if (rank === 'A') return 14; if (rank === 'K') return 13; if (rank === 'Q') return 12; if (rank === 'J') return 11; return parseInt(rank) || 0; }
@@ -281,7 +282,22 @@
         function createDeck() { const newDeck = []; SUITS.forEach(suit => { RANKS.forEach(rank => { newDeck.push({ suit, rank, value: getCardValue(rank), color: getCardColor(suit) }); }); }); return newDeck; }
         function shuffleDeck(deckToShuffle) { for (let i = deckToShuffle.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deckToShuffle[i], deckToShuffle[j]] = [deckToShuffle[j], deckToShuffle[i]]; } }
         function drawCard() { if (deck.length > 0) { return deck.pop(); } console.warn("Baraja vacía."); return null; }
-        function forceNextCard(conditionFn) { for (let i = deck.length - 1; i >= 0; i--) { if (conditionFn(deck[i])) { return deck.splice(i, 1)[0]; } } console.warn("Fallback: No se encontró carta forzada, sacando al azar."); return drawCard(); }
+        // Función para forzar la siguiente carta (para modo guiado)
+        function forceNextCard(conditionFn) {
+            // Busca desde el final del mazo (la próxima carta a sacar) hacia atrás
+            for (let i = deck.length - 1; i >= 0; i--) {
+                if (conditionFn(deck[i])) {
+                     // Si encontramos una carta que cumple, la sacamos y la devolvemos
+                    const forcedCard = deck.splice(i, 1)[0];
+                    console.log(`Modo Guiado: Forzando carta ${forcedCard.rank}${forcedCard.suit}`);
+                    return forcedCard;
+                }
+            }
+            // Fallback: si no se encuentra una carta que cumpla (raro, pero posible si la condición es muy específica y el mazo está casi vacío)
+            console.warn("Modo Guiado: No se encontró carta forzada que cumpla la condición, sacando al azar.");
+            return drawCard(); // Saca la siguiente carta normal
+        }
+
 
         // --- LocalStorage Functions ---
         function loadGameData() {
@@ -290,22 +306,38 @@
             if (isNaN(playerBalance) || playerBalance < 0) { playerBalance = STARTING_BALANCE; }
             const savedStats = localStorage.getItem(STATS_LOCAL_STORAGE_KEY);
             if (savedStats) { try { stats = JSON.parse(savedStats); stats.gamesPlayed = stats.gamesPlayed || 0; stats.gamesWon = stats.gamesWon || 0; stats.highestWin = stats.highestWin || 0; stats.longestStreak = stats.longestStreak || 0; stats.maxBalance = Math.max(stats.maxBalance || STARTING_BALANCE, playerBalance); } catch (e) { console.error("Error parsing stats", e); stats = { gamesPlayed: 0, gamesWon: 0, highestWin: 0, longestStreak: 0, maxBalance: playerBalance }; } } else { stats.maxBalance = playerBalance; }
-            nextGameIsGuided = false; guidedGameInProgress = false;
+            nextGameIsGuided = false; // Asegura que no empiece guiado al cargar
+            guidedGameInProgress = false; // Asegura que no esté guiado al cargar
         }
         function saveGameData() { try { localStorage.setItem(BALANCE_LOCAL_STORAGE_KEY, playerBalance.toString()); localStorage.setItem(STATS_LOCAL_STORAGE_KEY, JSON.stringify(stats)); } catch (e) { console.error("Error saving data", e); showMessage("Error: No se pudo guardar el progreso.", "error"); } }
 
         // --- Funciones de Actualización de Estadísticas ---
         function updateMaxBalance() { if (playerBalance > stats.maxBalance) { stats.maxBalance = playerBalance; } }
         function updateLongestStreak() { if (currentGameStreak > stats.longestStreak) { stats.longestStreak = currentGameStreak; } }
-        function endGameStatsUpdate(winAmount = 0, gameActuallyWon = false) { stats.gamesPlayed++; updateLongestStreak(); if (winAmount > stats.highestWin) { stats.highestWin = winAmount; } if (gameActuallyWon) { stats.gamesWon++; } currentGameStreak = 0; guidedGameInProgress = false; }
+        function endGameStatsUpdate(winAmount = 0, gameActuallyWon = false) {
+            stats.gamesPlayed++;
+            updateLongestStreak();
+            if (winAmount > stats.highestWin) { stats.highestWin = winAmount; }
+            if (gameActuallyWon) { stats.gamesWon++; }
+            currentGameStreak = 0;
+            guidedGameInProgress = false; // El modo guiado (si estaba activo) termina aquí
+        }
+
 
         // --- Funciones de UI ---
         function showMessage(text, type = 'info') {
             messageDiv.textContent = text;
-            let baseClasses = "font-medium min-h-[60px] flex items-center justify-center p-4 rounded-lg border shadow-sm ";
+            let baseClasses = "font-medium min-h-[60px] flex items-center justify-center p-4 rounded-lg border shadow-sm transition-opacity duration-300 ease-in-out "; // Añadido transition
             let typeClasses = "";
             switch (type) { case 'success': typeClasses = "bg-green-50 border-green-300 text-green-700"; break; case 'error': typeClasses = "bg-red-50 border-red-300 text-red-700"; break; case 'info': default: typeClasses = "bg-blue-50 border-blue-300 text-blue-700"; break; }
-            messageDiv.className = baseClasses + typeClasses;
+            // Force reflow for transition
+            messageDiv.style.opacity = 0;
+            requestAnimationFrame(() => {
+                 messageDiv.className = baseClasses + typeClasses;
+                 requestAnimationFrame(() => {
+                    messageDiv.style.opacity = 1;
+                 });
+            });
         }
         function createCardElement(card, label = null) { const cardDiv = document.createElement('div'); cardDiv.classList.add('inline-block', 'text-center', 'mx-2'); const cardInnerDiv = document.createElement('div'); cardInnerDiv.classList.add('card', card.color.toLowerCase()); cardInnerDiv.innerHTML = `<span class="card-rank">${card.rank}</span><span class="card-suit">${card.suit}</span><span class="card-suit-bottom">${card.suit}</span>`; cardDiv.appendChild(cardInnerDiv); if (label) { const labelDiv = document.createElement('div'); labelDiv.classList.add('card-label'); labelDiv.textContent = label; cardDiv.appendChild(labelDiv); } return cardDiv; }
         function createRoundButton(text, dataValue, colorClasses, extraClasses = "", id = null, dataType = "guess") { const idAttribute = id ? `id="${id}"` : ""; return `<button ${idAttribute} data-${dataType}="${dataValue}" class="px-5 py-2 rounded-md font-semibold shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition duration-150 ease-in-out ${colorClasses} ${extraClasses}">${text}</button>`; }
@@ -318,7 +350,7 @@
 
         // --- Función `updateUI` Principal ---
         function updateUI() {
-            playerBalanceDisplay.textContent = playerBalance;
+            playerBalanceDisplaySpan.textContent = playerBalance; // Actualiza el span interno
             const maxPossibleBet = Math.max(MIN_BET, playerBalance);
             const noBalance = playerBalance < MIN_BET;
 
@@ -326,10 +358,28 @@
                 betSlider.max = maxPossibleBet; betAmountInput.max = maxPossibleBet;
                 let currentVal = parseInt(betAmountInput.value) || lastBetAmount;
                 currentVal = Math.max(MIN_BET, Math.min(currentVal, maxPossibleBet));
-                if (currentRound === 0 || parseInt(betAmountInput.value) > maxPossibleBet || isNaN(parseInt(betAmountInput.value))) { betAmountInput.value = currentVal; betSlider.value = currentVal; betSliderValue.textContent = `${currentVal} €`; }
-                else { if (betSlider.value != betAmountInput.value){ betSlider.value = betAmountInput.value; betSliderValue.textContent = `${betAmountInput.value} €`; } }
+                // Solo actualiza si el valor actual del input no es válido o estamos en ronda 0
+                if (currentRound === 0 || parseInt(betAmountInput.value) > maxPossibleBet || isNaN(parseInt(betAmountInput.value))) {
+                     betAmountInput.value = currentVal;
+                     betSlider.value = currentVal;
+                     betSliderValue.textContent = `${currentVal} €`;
+                } else {
+                     // Sincroniza slider si el input cambió (e.g., por escritura directa)
+                     if (betSlider.value != betAmountInput.value){
+                         betSlider.value = betAmountInput.value;
+                         betSliderValue.textContent = `${betAmountInput.value} €`;
+                     }
+                }
                 betSlider.disabled = noBalance; betAmountInput.disabled = noBalance; startGameBtn.disabled = noBalance;
-            } else { betAmountInput.max = maxPossibleBet; if (currentRound === 0) { betAmountInput.value = Math.max(MIN_BET, Math.min(lastBetAmount, maxPossibleBet)); } betAmountInput.disabled = noBalance; startGameBtn.disabled = noBalance; }
+            } else if (betAmountInput) { // Si solo hay input
+                 betAmountInput.max = maxPossibleBet;
+                 if (currentRound === 0) {
+                     betAmountInput.value = Math.max(MIN_BET, Math.min(lastBetAmount, maxPossibleBet));
+                 }
+                 betAmountInput.disabled = noBalance;
+                 startGameBtn.disabled = noBalance;
+            }
+
 
             currentRoundDisplay.textContent = currentRound === 5 ? '5 (Final)' : (currentRound > 0 ? `${currentRound}` : '-');
             initialBetDisplay.textContent = `${currentBet} €`;
@@ -338,7 +388,9 @@
             if (currentRound !== 5 && !inRound5ChoicePhase) {
                 if (!gameOver && currentRound > 0 && currentRound <= 4) {
                     const currentRetireAmount = currentRound > 1 ? (currentBet * CUMULATIVE_ROUND_MULTIPLIERS[currentRound - 1]) : currentBet;
+                    // Usamos setTimeout 0 para asegurar que se ejecute después del renderizado actual
                     setTimeout(() => {
+                        // Volvemos a comprobar el estado por si ha cambiado muy rápido
                         if (currentRound > 0 && currentRound <= 4 && !gameOver && !inRound5ChoicePhase) {
                             let messageText = ""; let controlsHtml = "";
                             let previousCardRank = cardsOnTable.length > 0 ? cardsOnTable[cardsOnTable.length - 1].rank : '';
@@ -351,25 +403,28 @@
                                 case 4: controlsHtml = createRound4Controls(); messageText = "Ronda 4: Adivina el Palo"; break;
                             }
                             const retireButtonHtml = createRoundButton(`Retirarse (${currentRetireAmount} €)`, "Retire", "bg-yellow-600 hover:bg-yellow-700 text-white focus:ring-yellow-500", "retire-btn");
-                            if (document.getElementById('round-controls')) {
+                            if (document.getElementById('round-controls')) { // Check if element still exists
                                 roundControls.innerHTML = `<p class="text-lg font-semibold text-gray-700 mb-3">${messageText.split(':')[1]?.trim() || messageText}</p><div class="controls-container">${controlsHtml}${retireButtonHtml}</div>`;
                                 roundControls.querySelectorAll('button[data-guess]:not(.retire-btn)').forEach(btn => btn.addEventListener('click', handleGuess));
                                 const retireBtn = roundControls.querySelector('.retire-btn');
                                 if (retireBtn) { retireBtn.addEventListener('click', handleRetire); retireBtn.disabled = !(currentRetireAmount >= currentBet && currentRound > 0); retireBtn.dataset.guess = "Retire"; }
+                                // Deshabilitar 'Dentro' si las cartas son iguales en Ronda 3
                                 if (currentRound === 3) { const inBtn=roundControls.querySelector('#guess-in-btn'); if (inBtn && prevCard1Value === prevCard2Value) { inBtn.disabled = true; inBtn.title = "No se puede elegir 'Dentro' con cartas iguales"; } }
                                 showMessage(messageText.split(':')[0], "info");
                             }
                         }
                     }, 0);
                 }
-            } else if (currentRound === 5 && !inRound5ChoicePhase && !gameOver) {
+            } else if (currentRound === 5 && !inRound5ChoicePhase && !gameOver) { // Esperando revelación R5
                  roundControls.innerHTML = `<p class="text-lg font-semibold text-gray-700 mb-3">¿Superará tu carta a la del banquero?</p><div class="controls-container">${createRoundButton(`¡Revelar Cartas!`, 'reveal', 'bg-purple-600 hover:bg-purple-700 text-white focus:ring-purple-500', '', 'reveal-r5-btn')}</div>`;
                  const revealBtn = roundControls.querySelector('#reveal-r5-btn'); if (revealBtn) { revealBtn.addEventListener('click', playRound5); } else { console.error("Error: Botón R5 no encontrado"); }
-            } else if (inRound5ChoicePhase) {
+            } else if (inRound5ChoicePhase) { // Fase de elección R5 (Cobrar o Arriesgar)
                 const winningsR4 = currentBet * CUMULATIVE_ROUND_MULTIPLIERS[4]; const grandPrizeR5 = currentBet * ROUND_5_MULTIPLIER;
                 roundControls.innerHTML = `<p class="text-lg font-semibold text-gray-700 mb-3">Ronda Final: ¡Todo o Nada!</p><div class="controls-container">${createRoundButton(`Cobrar ${winningsR4} €`, 'collect', 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500', 'r5-choice-btn', null, 'choice')}${createRoundButton(`¡Arriesgar TODO por ${grandPrizeR5} €!`, 'gamble', 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500', 'r5-choice-btn', null, 'choice')}</div>`;
                 roundControls.querySelectorAll('.r5-choice-btn').forEach(btn => btn.addEventListener('click', handleRound5Choice));
-            } else { roundControls.innerHTML = ''; }
+            } else { // Juego terminado o en pantalla de inicio
+                roundControls.innerHTML = '';
+            }
 
             const showBetting = (currentRound === 0 && !gameOver);
             bettingSection.classList.toggle('hidden', !showBetting);
@@ -392,11 +447,13 @@
             betAmountInput.classList.remove('border-red-500');
             lastBetAmount = bet;
 
+            // Deshabilitar controles de apuesta
+            startGameBtn.disabled = true;
+            betAmountInput.disabled = true;
+            if(betSlider) betSlider.disabled = true;
+
             // *** Iniciar Animación de Barajado ***
-            startGameBtn.disabled = true; // Deshabilitar botón durante animación
-            betAmountInput.disabled = true; // Deshabilitar input
-            betSlider.disabled = true; // Deshabilitar slider
-            shuffleAnimationOverlay.classList.add('visible'); // Mostrar overlay
+            shuffleAnimationOverlay.classList.add('visible');
 
             // Esperar a que termine la animación para continuar
             setTimeout(() => {
@@ -421,89 +478,455 @@
                     playerBalance -= currentBet;
                     updateMaxBalance();
 
-                    if (nextGameIsGuided) { guidedGameInProgress = true; nextGameIsGuided = false; } else { guidedGameInProgress = false; }
+                    // Activar el modo guiado para ESTA partida si estaba marcado
+                    if (nextGameIsGuided) {
+                        guidedGameInProgress = true;
+                        nextGameIsGuided = false; // Resetear para la siguiente
+                        console.log("Modo guiado iniciado para esta partida."); // Log interno
+                    } else {
+                        guidedGameInProgress = false;
+                    }
+
 
                     oldCardElements.forEach(el => el.remove()); // Limpiar DOM cartas viejas
 
                     showMessage(`Apuesta de ${currentBet} €. ¡Suerte Ronda 1!`, "info");
                     updateUI(); // Actualiza la UI para mostrar la ronda 1
-                    // Los botones/inputs se rehabilitarán en updateUI si es necesario
-                }, oldCardElements.length > 0 ? 400 : 0);
+
+                    // No necesitamos rehabilitar aquí los botones de apuesta, updateUI lo gestiona
+                }, oldCardElements.length > 0 ? 400 : 0); // Espera 400ms si había cartas que quitar
 
             }, SHUFFLE_ANIMATION_DURATION); // Esperar duración animación barajado
         }
 
 
         function handleGuess(event) {
-             if (gameOver || inRound5ChoicePhase) return;
+             if (gameOver || inRound5ChoicePhase) return; // No procesar si el juego acabó o estamos en elección R5
              const targetButton = event.target.closest('button');
-             if (!targetButton || targetButton.disabled) return;
-             disableRoundButtons(true);
-             const guess = targetButton.dataset.guess;
+             if (!targetButton || targetButton.disabled) return; // Ignorar si no es botón o está deshabilitado
+
+             disableRoundButtons(true); // Deshabilitar botones mientras se procesa
+             const guess = targetButton.dataset.guess; // Obtener la elección del jugador
+
              let drawnCard = null;
-             if (guidedGameInProgress) { switch (currentRound) { case 1: drawnCard = forceNextCard(card => card.color === 'Red'); break; case 2: const prevValueR2 = cardsOnTable[0]?.value; if (prevValueR2) { drawnCard = forceNextCard(card => card.value < prevValueR2); } else { drawnCard = drawCard(); } break; case 3: const val1R3 = cardsOnTable[0]?.value; const val2R3 = cardsOnTable[1]?.value; if (val1R3 && val2R3 && val1R3 !== val2R3) { const minValR3 = Math.min(val1R3, val2R3); const maxValR3 = Math.max(val1R3, val2R3); if (maxValR3 - minValR3 > 1) { drawnCard = forceNextCard(card => card.value > minValR3 && card.value < maxValR3); } else { console.warn("Fallback: No In for adjacent."); drawnCard = drawCard(); } } else { drawnCard = drawCard(); } break; case 4: drawnCard = forceNextCard(card => card.suit === '♥'); break; default: drawnCard = drawCard(); } } else { drawnCard = drawCard(); }
-             if (!drawnCard) { showMessage("Error: Sin cartas.", "error"); gameOver = true; guidedGameInProgress = false; updateUI(); return; }
-             const cardElementWrapper = createCardElement(drawnCard); const cardInnerDiv = cardElementWrapper.querySelector('.card'); cardsArea.appendChild(cardElementWrapper);
-             setTimeout(() => { cardInnerDiv.classList.add('card-enter', 'card-enter-active'); setTimeout(() => { cardInnerDiv.classList.remove('card-enter'); }, 500); }, 10);
-             let correctGuess = false; const lastCardOnTable = cardsOnTable.length > 0 ? cardsOnTable[cardsOnTable.length - 1] : null; const secondLastCardOnTable = cardsOnTable.length > 1 ? cardsOnTable[cardsOnTable.length - 2] : null;
-             switch (currentRound) { case 1: correctGuess = (drawnCard.color === guess); break; case 2: const pV2 = lastCardOnTable?.value ?? 0; const cV2=drawnCard.value; correctGuess = (guess === 'Higher') ? cV2 > pV2 : cV2 < pV2; if (cV2 === pV2) correctGuess = false; break; case 3: const v1=secondLastCardOnTable?.value ?? 0; const v2=lastCardOnTable?.value ?? 0; const v3=drawnCard.value; const minV=Math.min(v1, v2); const maxV=Math.max(v1, v2); if (v1 === v2 || !v1 || !v2) { correctGuess = (guess === 'Out'); } else { correctGuess = (guess === 'In') ? (v3 > minV && v3 < maxV) : (v3 < minV || v3 > maxV); } break; case 4: correctGuess = (drawnCard.suit === guess); break; }
-             if (guidedGameInProgress && !correctGuess) { guidedGameInProgress = false; }
-             cardsOnTable.push(drawnCard);
+
+             // --- Lógica de Modo Guiado ---
+             if (guidedGameInProgress) {
+                 console.log(`Modo Guiado activo para Ronda ${currentRound}`);
+                 try {
+                     switch (currentRound) {
+                         case 1: // Forzar Roja
+                             drawnCard = forceNextCard(card => card.color === 'Red');
+                             break;
+                         case 2: // Forzar Menor que la anterior (si es posible)
+                             const prevValueR2 = cardsOnTable[0]?.value;
+                             if (prevValueR2 && prevValueR2 > 2) { // Solo si la anterior no es un 2
+                                 drawnCard = forceNextCard(card => card.value < prevValueR2);
+                             } else { // Si la anterior es 2 o no hay, saca normal (o podría forzar Mayor si prefieres)
+                                 drawnCard = drawCard();
+                                 console.log("Modo Guiado: Fallback R2 (carta anterior 2 o no existe)");
+                             }
+                             break;
+                         case 3: // Forzar Dentro (si es posible y las cartas no son iguales/adyacentes)
+                             const val1R3 = cardsOnTable[0]?.value;
+                             const val2R3 = cardsOnTable[1]?.value;
+                             if (val1R3 && val2R3 && val1R3 !== val2R3) {
+                                 const minValR3 = Math.min(val1R3, val2R3);
+                                 const maxValR3 = Math.max(val1R3, val2R3);
+                                 // Solo forzar 'Dentro' si hay espacio (no son adyacentes)
+                                 if (maxValR3 - minValR3 > 1) {
+                                     drawnCard = forceNextCard(card => card.value > minValR3 && card.value < maxValR3);
+                                 } else {
+                                     // Si son adyacentes, 'Dentro' es imposible, saca normal (fallará si eligen 'Dentro')
+                                     drawnCard = drawCard();
+                                      console.log("Modo Guiado: Fallback R3 (cartas adyacentes)");
+                                 }
+                             } else { // Si son iguales o falta alguna, saca normal
+                                 drawnCard = drawCard();
+                                 console.log("Modo Guiado: Fallback R3 (cartas iguales o faltan)");
+                             }
+                             break;
+                         case 4: // Forzar Corazones ♥
+                             drawnCard = forceNextCard(card => card.suit === '♥');
+                             break;
+                         default: // Rondas inesperadas, sacar normal
+                             drawnCard = drawCard();
+                     }
+                 } catch (e) {
+                    console.error("Error en modo guiado, sacando carta normal:", e);
+                    drawnCard = drawCard();
+                 }
+             } else {
+                 // --- Juego Normal ---
+                 drawnCard = drawCard();
+             }
+
+             if (!drawnCard) { // Si no quedan cartas
+                 showMessage("Error: La baraja está vacía.", "error");
+                 gameOver = true;
+                 guidedGameInProgress = false; // Asegura resetear estado guiado
+                 updateUI();
+                 return;
+             }
+
+             // Añadir carta a la mesa (con animación)
+             const cardElementWrapper = createCardElement(drawnCard);
+             const cardInnerDiv = cardElementWrapper.querySelector('.card');
+             cardsArea.appendChild(cardElementWrapper);
+             // Pequeño delay para asegurar que el elemento está en el DOM antes de animar
+             setTimeout(() => {
+                 cardInnerDiv.classList.add('card-enter', 'card-enter-active');
+                 // Quitar clase de animación inicial después de que termine
+                 setTimeout(() => { cardInnerDiv.classList.remove('card-enter'); }, 500);
+             }, 10);
+
+
+             // --- Evaluar Acierto ---
+             let correctGuess = false;
+             const lastCardOnTable = cardsOnTable.length > 0 ? cardsOnTable[cardsOnTable.length - 1] : null;
+             const secondLastCardOnTable = cardsOnTable.length > 1 ? cardsOnTable[cardsOnTable.length - 2] : null;
+
+             switch (currentRound) {
+                 case 1: // Roja o Negra
+                     correctGuess = (drawnCard.color === guess);
+                     break;
+                 case 2: // Mayor o Menor
+                     const pV2 = lastCardOnTable?.value ?? 0; // Valor carta anterior
+                     const cV2 = drawnCard.value; // Valor carta actual
+                     correctGuess = (guess === 'Higher') ? cV2 > pV2 : cV2 < pV2;
+                     if (cV2 === pV2) correctGuess = false; // Empate siempre pierde
+                     break;
+                 case 3: // Dentro o Fuera
+                     const v1 = secondLastCardOnTable?.value ?? 0;
+                     const v2 = lastCardOnTable?.value ?? 0;
+                     const v3 = drawnCard.value;
+                     const minV = Math.min(v1, v2);
+                     const maxV = Math.max(v1, v2);
+                     if (v1 === v2 || !v1 || !v2) { // Si las cartas son iguales o falta alguna, solo 'Fuera' puede ser correcto
+                         correctGuess = (guess === 'Out');
+                     } else {
+                         correctGuess = (guess === 'In') ? (v3 > minV && v3 < maxV) : (v3 < minV || v3 > maxV);
+                     }
+                     break;
+                 case 4: // Palo
+                     correctGuess = (drawnCard.suit === guess);
+                     break;
+             }
+
+             // Si estaba en modo guiado y falló (porque eligió mal), desactivar modo guiado
+             if (guidedGameInProgress && !correctGuess) {
+                 console.log("Modo Guiado desactivado por fallo del jugador.");
+                 guidedGameInProgress = false;
+             }
+
+             cardsOnTable.push(drawnCard); // Añadir carta al estado del juego
+
+             // --- Resultado y Siguiente Paso (con delay para ver la carta) ---
              setTimeout(() => {
                  if (correctGuess) {
-                     currentGameStreak++; updateLongestStreak(); potentialWinnings = currentBet * CUMULATIVE_ROUND_MULTIPLIERS[currentRound];
-                     cardInnerDiv.classList.add('card-highlight-success'); setTimeout(() => cardInnerDiv.classList.remove('card-highlight-success'), 800);
-                     if (currentRound === 4) { inRound5ChoicePhase = true; showMessage(`¡Ronda 4 SUPERADA! ¿Arriesgar TODO por el premio final?`, "info"); updateUI(); }
-                     else { showMessage(`¡Correcto! Siguiente ronda...`, "success"); currentRound++; updateUI(); setTimeout(() => { if (currentRound <= 4 && !gameOver && !inRound5ChoicePhase) { disableRoundButtons(false); } }, 50); }
-                 } else {
-                     cardInnerDiv.classList.add('card-highlight-error'); setTimeout(() => cardInnerDiv.classList.remove('card-highlight-error'), 800);
-                     endGameStatsUpdate(0, false); showMessage(`Incorrecto: ${drawnCard.rank}${drawnCard.suit}. Perdiste ${currentBet} €. Saldo: ${playerBalance} €`, "error"); potentialWinnings = 0; gameOver = true; guidedGameInProgress = false; saveGameData(); updateUI();
+                     currentGameStreak++;
+                     updateLongestStreak();
+                     potentialWinnings = currentBet * CUMULATIVE_ROUND_MULTIPLIERS[currentRound];
+
+                     // Highlight visual de acierto
+                     cardInnerDiv.classList.add('card-highlight-success');
+                     setTimeout(() => cardInnerDiv.classList.remove('card-highlight-success'), 800);
+
+                     if (currentRound === 4) { // Llegó al final de las 4 rondas
+                         inRound5ChoicePhase = true; // Activar fase de elección R5
+                         showMessage(`¡Ronda 4 SUPERADA! Has acumulado ${potentialWinnings} €. ¿Arriesgar TODO por el premio final?`, "info");
+                         updateUI(); // Mostrar botones Cobrar/Arriesgar
+                     } else { // Pasar a la siguiente ronda normal
+                         showMessage(`¡Correcto! Siguiente ronda...`, "success");
+                         currentRound++;
+                         updateUI(); // Actualizar UI para la nueva ronda
+                         // Rehabilitar botones después de un pequeño delay
+                          setTimeout(() => {
+                              if (currentRound <= 4 && !gameOver && !inRound5ChoicePhase) { // Doble check
+                                disableRoundButtons(false);
+                              }
+                          }, 50); // Delay corto para asegurar que updateUI ha renderizado
+                     }
+                 } else { // Fallo
+                     // Highlight visual de error
+                     cardInnerDiv.classList.add('card-highlight-error');
+                     setTimeout(() => cardInnerDiv.classList.remove('card-highlight-error'), 800);
+
+                     endGameStatsUpdate(0, false); // Actualizar stats (0 ganancia, no ganada)
+                     showMessage(`Incorrecto: Salió ${drawnCard.rank}${drawnCard.suit}. Perdiste la apuesta inicial de ${currentBet} €. Saldo actual: ${playerBalance} €`, "error");
+                     potentialWinnings = 0;
+                     gameOver = true;
+                     guidedGameInProgress = false; // Asegurar que se desactiva al perder
+                     saveGameData(); // Guardar estado tras perder
+                     updateUI(); // Mostrar botón "Nueva Partida"
                  }
-             }, 750);
+             }, 750); // Delay antes de mostrar resultado y siguiente paso
         }
 
+
         // --- Funciones Ronda 5 ---
-        function handleRound5Choice(event) { if (!inRound5ChoicePhase) return; const targetButton = event.target.closest('button'); if (!targetButton) return; roundControls.querySelectorAll('.r5-choice-btn').forEach(btn => btn.disabled = true); const choice = targetButton.dataset.choice; inRound5ChoicePhase = false; if (choice === 'collect') { const winningsR4 = currentBet * CUMULATIVE_ROUND_MULTIPLIERS[4]; playerBalance += winningsR4; potentialWinnings = winningsR4; updateMaxBalance(); endGameStatsUpdate(winningsR4, true); showMessage(`¡Felicidades! Cobras ${winningsR4} €. Saldo final: ${playerBalance} €`, "success"); gameOver = true; guidedGameInProgress = false; saveGameData(); updateUI(); } else if (choice === 'gamble') { startRound5(); } }
-        function startRound5() { currentRound = 5; showMessage("Ronda 5: Corte Alto/Bajo. Tu carta vs Banquero. Empate pierde.", "info"); updateUI(); }
-        function playRound5() { const revealBtn = roundControls.querySelector('#reveal-r5-btn'); if (revealBtn) revealBtn.disabled = true; roundControls.innerHTML = ''; const oldCardElements = cardsArea.querySelectorAll('#cards-area > .inline-block'); oldCardElements.forEach(el => { const cardInner = el.querySelector('.card'); if (cardInner) { cardInner.classList.remove('card-enter-active'); cardInner.classList.add('card-exit'); } }); setTimeout(() => { oldCardElements.forEach(el => el.remove()); if (deck.length < 2) { const winningsR4 = currentBet * CUMULATIVE_ROUND_MULTIPLIERS[4]; showMessage("Error: No quedan suficientes cartas. Cobrando ganancia R4.", "error"); potentialWinnings = winningsR4; playerBalance += potentialWinnings; updateMaxBalance(); endGameStatsUpdate(potentialWinnings, true); gameOver = true; guidedGameInProgress = false; saveGameData(); updateUI(); return; } const playerCard = drawCard(); const dealerCard = drawCard(); const playerCardElementWrapper = createCardElement(playerCard, "Tu Carta"); const dealerCardElementWrapper = createCardElement(dealerCard, "Carta Banquero"); const playerCardInner = playerCardElementWrapper.querySelector('.card'); const dealerCardInner = dealerCardElementWrapper.querySelector('.card'); cardsArea.appendChild(playerCardElementWrapper); cardsArea.appendChild(dealerCardElementWrapper); setTimeout(() => { playerCardInner.classList.add('card-enter', 'card-enter-active'); setTimeout(() => playerCardInner.classList.remove('card-enter'), 500); }, 10); setTimeout(() => { dealerCardInner.classList.add('card-enter', 'card-enter-active'); setTimeout(() => dealerCardInner.classList.remove('card-enter'), 500); }, 150); const playerValue = playerCard.value; const dealerValue = dealerCard.value; const winR5 = playerValue > dealerValue; setTimeout(() => { let finalMessage = ""; let messageType = "info"; if (winR5) { const grandPrize = currentBet * ROUND_5_MULTIPLIER; playerBalance += grandPrize; potentialWinnings = grandPrize; updateMaxBalance(); endGameStatsUpdate(grandPrize, true); finalMessage = `¡CORTE GANADOR! (${playerCard.rank} > ${dealerCard.rank}). ¡Premio gordo de ${grandPrize} €! Saldo: ${playerBalance} €`; messageType = "success"; playerCardInner.classList.add('card-highlight-success'); dealerCardInner.classList.add('card-highlight-error'); setTimeout(() => { playerCardInner.classList.remove('card-highlight-success'); dealerCardInner.classList.remove('card-highlight-error'); }, 800); } else { endGameStatsUpdate(0, false); potentialWinnings = 0; const reason = playerValue === dealerValue ? `¡Empate!` : `${playerCard.rank} no supera a ${dealerCard.rank}.`; finalMessage = `¡Fin del juego! ${reason} Perdiste la apuesta inicial de ${currentBet} €. Saldo: ${playerBalance} €`; messageType = "error"; playerCardInner.classList.add('card-highlight-error'); if (playerValue < dealerValue) { dealerCardInner.classList.add('card-highlight-success'); } setTimeout(() => { playerCardInner.classList.remove('card-highlight-error'); dealerCardInner.classList.remove('card-highlight-success'); }, 800); } gameOver = true; guidedGameInProgress = false; showMessage(finalMessage, messageType); saveGameData(); updateUI(); }, 1800); }, oldCardElements.length > 0 ? 400 : 0); }
+        function handleRound5Choice(event) {
+             if (!inRound5ChoicePhase) return;
+             const targetButton = event.target.closest('button');
+             if (!targetButton) return;
+
+             // Deshabilitar botones de elección
+             roundControls.querySelectorAll('.r5-choice-btn').forEach(btn => btn.disabled = true);
+
+             const choice = targetButton.dataset.choice;
+             inRound5ChoicePhase = false; // Salir de la fase de elección
+
+             if (choice === 'collect') { // Eligió cobrar
+                 const winningsR4 = currentBet * CUMULATIVE_ROUND_MULTIPLIERS[4];
+                 playerBalance += winningsR4;
+                 potentialWinnings = winningsR4;
+                 updateMaxBalance();
+                 endGameStatsUpdate(winningsR4, true); // Partida ganada (cobró)
+                 showMessage(`¡Felicidades! Cobraste ${winningsR4} €. Saldo final: ${playerBalance} €`, "success");
+                 gameOver = true;
+                 guidedGameInProgress = false; // El modo guiado termina aquí si estaba activo
+                 saveGameData();
+                 updateUI(); // Mostrar botón Nueva Partida
+             } else if (choice === 'gamble') { // Eligió arriesgar
+                 startRound5();
+             }
+        }
+        function startRound5() {
+            currentRound = 5;
+            showMessage("Ronda 5: Corte Alto/Bajo. Tu carta vs Banquero. Empate pierde.", "info");
+            updateUI(); // Muestra botón "Revelar Cartas"
+        }
+        function playRound5() {
+            // Deshabilitar botón revelar por si acaso
+            const revealBtn = roundControls.querySelector('#reveal-r5-btn');
+            if (revealBtn) revealBtn.disabled = true;
+            roundControls.innerHTML = ''; // Limpiar controles
+
+            // Animar salida cartas rondas 1-4
+             const oldCardElements = cardsArea.querySelectorAll('#cards-area > .inline-block');
+             oldCardElements.forEach(el => { const cardInner = el.querySelector('.card'); if (cardInner) { cardInner.classList.remove('card-enter-active'); cardInner.classList.add('card-exit'); } });
+
+             // Esperar animación de salida
+            setTimeout(() => {
+                oldCardElements.forEach(el => el.remove()); // Limpiar mesa
+
+                // Verificar si quedan cartas suficientes
+                if (deck.length < 2) {
+                     const winningsR4 = currentBet * CUMULATIVE_ROUND_MULTIPLIERS[4]; // Cobra lo de R4 por seguridad
+                     showMessage("Error: No quedan suficientes cartas en la baraja. Cobrando ganancia de Ronda 4.", "error");
+                     potentialWinnings = winningsR4;
+                     playerBalance += potentialWinnings;
+                     updateMaxBalance();
+                     endGameStatsUpdate(potentialWinnings, true); // Contar como ganada
+                     gameOver = true;
+                     guidedGameInProgress = false;
+                     saveGameData();
+                     updateUI();
+                     return;
+                }
+
+                // Sacar cartas para jugador y banquero
+                const playerCard = drawCard();
+                const dealerCard = drawCard();
+
+                // Crear y añadir elementos de carta a la mesa
+                const playerCardElementWrapper = createCardElement(playerCard, "Tu Carta");
+                const dealerCardElementWrapper = createCardElement(dealerCard, "Carta Banquero");
+                const playerCardInner = playerCardElementWrapper.querySelector('.card');
+                const dealerCardInner = dealerCardElementWrapper.querySelector('.card');
+                cardsArea.appendChild(playerCardElementWrapper);
+                cardsArea.appendChild(dealerCardElementWrapper);
+
+                // Animar entrada de cartas (con ligero stagger)
+                setTimeout(() => { playerCardInner.classList.add('card-enter', 'card-enter-active'); setTimeout(() => playerCardInner.classList.remove('card-enter'), 500); }, 10);
+                setTimeout(() => { dealerCardInner.classList.add('card-enter', 'card-enter-active'); setTimeout(() => dealerCardInner.classList.remove('card-enter'), 500); }, 150);
+
+
+                // Evaluar resultado R5
+                const playerValue = playerCard.value;
+                const dealerValue = dealerCard.value;
+                const winR5 = playerValue > dealerValue; // Gana si su carta es estrictamente mayor
+
+                 // Mostrar resultado después de un delay para ver las cartas
+                setTimeout(() => {
+                     let finalMessage = "";
+                     let messageType = "info";
+
+                     if (winR5) { // Ganó R5
+                         const grandPrize = currentBet * ROUND_5_MULTIPLIER;
+                         playerBalance += grandPrize;
+                         potentialWinnings = grandPrize;
+                         updateMaxBalance();
+                         endGameStatsUpdate(grandPrize, true); // Partida ganada con premio gordo
+                         finalMessage = `¡CORTE GANADOR! (${playerCard.rank}${playerCard.suit} > ${dealerCard.rank}${dealerCard.suit}). ¡Has ganado el premio gordo de ${grandPrize} €! Saldo final: ${playerBalance} €`;
+                         messageType = "success";
+                         // Highlight visual
+                         playerCardInner.classList.add('card-highlight-success');
+                         dealerCardInner.classList.add('card-highlight-error');
+                         setTimeout(() => { playerCardInner.classList.remove('card-highlight-success'); dealerCardInner.classList.remove('card-highlight-error'); }, 800);
+                     } else { // Perdió R5 (menor o empate)
+                         endGameStatsUpdate(0, false); // Partida perdida (perdió la apuesta inicial)
+                         potentialWinnings = 0;
+                         const reason = playerValue === dealerValue ? `¡Empate!` : `${playerCard.rank}${playerCard.suit} no supera a ${dealerCard.rank}${dealerCard.suit}.`;
+                         finalMessage = `¡Fin del juego! ${reason} Perdiste la apuesta inicial de ${currentBet} €. Saldo actual: ${playerBalance} €`;
+                         messageType = "error";
+                         // Highlight visual
+                         playerCardInner.classList.add('card-highlight-error');
+                         // Solo destacar la del dealer como ganadora si realmente fue mayor
+                         if (playerValue < dealerValue) {
+                            dealerCardInner.classList.add('card-highlight-success');
+                         }
+                         setTimeout(() => { playerCardInner.classList.remove('card-highlight-error'); dealerCardInner.classList.remove('card-highlight-success'); }, 800);
+                     }
+
+                     gameOver = true;
+                     guidedGameInProgress = false; // Asegurar desactivación
+                     showMessage(finalMessage, messageType);
+                     saveGameData();
+                     updateUI(); // Mostrar botón Nueva Partida
+                 }, 1800); // Delay largo para ver cartas y animación highlight
+
+            }, oldCardElements.length > 0 ? 400 : 0); // Espera animación salida cartas R1-4
+        }
+
 
         function handleRetire(event) {
              if (gameOver || currentRound === 0 || inRound5ChoicePhase) return;
              const targetButton = event.target.closest('button');
              if (!targetButton || targetButton.disabled) return;
-             disableRoundButtons(true);
+
+             disableRoundButtons(true); // Deshabilitar botones
+
+             // Calcular ganancia según ronda actual
              const winningsToCollect = currentRound > 1 ? (currentBet * CUMULATIVE_ROUND_MULTIPLIERS[currentRound - 1]) : currentBet;
+
+             // Animar salida de cartas
              const cardElements = cardsArea.querySelectorAll('#cards-area > .inline-block');
              cardElements.forEach(el => { const cardInner = el.querySelector('.card'); if (cardInner) { cardInner.classList.remove('card-enter-active'); cardInner.classList.add('card-exit'); } });
+
+             // Esperar animación de salida
              setTimeout(() => {
-                 if (winningsToCollect >= currentBet) { playerBalance += winningsToCollect; potentialWinnings = winningsToCollect; updateMaxBalance(); endGameStatsUpdate(winningsToCollect, false); showMessage(`Te retiras. Cobras ${winningsToCollect} €. Saldo: ${playerBalance} €`, "success"); saveGameData(); }
-                 else { endGameStatsUpdate(0, false); showMessage(`Error al retirar. Saldo: ${playerBalance} €`, "error"); saveGameData(); }
-                 gameOver = true; guidedGameInProgress = false; cardElements.forEach(el => el.remove()); roundControls.innerHTML = ''; updateUI();
-             }, 400);
+                 if (winningsToCollect >= currentBet) { // Validación básica
+                     playerBalance += winningsToCollect;
+                     potentialWinnings = winningsToCollect;
+                     updateMaxBalance();
+                     // Retirarse no cuenta como 'partida ganada' en stats, pero sí actualiza max win si aplica
+                     endGameStatsUpdate(winningsToCollect, false);
+                     showMessage(`Te has retirado. Cobras ${winningsToCollect} €. Saldo actual: ${playerBalance} €`, "success");
+                     saveGameData();
+                 } else { // Caso improbable de error
+                     endGameStatsUpdate(0, false);
+                     showMessage(`Error al calcular la retirada. No se realizaron cambios. Saldo: ${playerBalance} €`, "error");
+                     saveGameData(); // Guardar por si acaso
+                 }
+                 gameOver = true;
+                 guidedGameInProgress = false; // Asegurar desactivación
+                 cardElements.forEach(el => el.remove()); // Limpiar mesa
+                 roundControls.innerHTML = ''; // Limpiar controles
+                 updateUI(); // Mostrar botón Nueva Partida
+             }, 400); // Espera animación salida
         }
 
+
         function resetGame() {
+            // Animar salida de cartas si las hay
             const cardElements = cardsArea.querySelectorAll('#cards-area > .inline-block');
              cardElements.forEach(el => { const cardInner = el.querySelector('.card'); if (cardInner) { cardInner.classList.remove('card-enter-active'); cardInner.classList.add('card-exit'); } });
+
+            // Esperar animación de salida
             setTimeout(() => {
-                currentBet = 0; potentialWinnings = 0; currentRound = 0; cardsOnTable = []; gameOver = false; inRound5ChoicePhase = false; currentGameStreak = 0; guidedGameInProgress = false;
-                cardElements.forEach(el => el.remove()); roundControls.innerHTML = '';
+                currentBet = 0;
+                potentialWinnings = 0;
+                currentRound = 0;
+                cardsOnTable = [];
+                gameOver = false;
+                inRound5ChoicePhase = false;
+                currentGameStreak = 0;
+                // guidedGameInProgress y nextGameIsGuided NO se resetean aquí, dependen de cómo terminó la partida anterior o acciones del usuario
+                // Se resetean/usan en startGame o al final de una partida
+
+                cardElements.forEach(el => el.remove()); // Limpiar mesa
+                roundControls.innerHTML = ''; // Limpiar controles
+
                 showMessage("Coloca tu apuesta para iniciar una nueva partida.", "info");
-                updateUI();
-            }, cardElements.length > 0 ? 400 : 0);
+                updateUI(); // Vuelve a la pantalla de apuestas
+            }, cardElements.length > 0 ? 400 : 0); // Espera 400ms si había cartas
         }
 
         // --- Event Listeners Estáticos ---
         startGameBtn.addEventListener('click', startGame);
         newGameBtn.addEventListener('click', resetGame);
-        getFundsBtn.addEventListener('click', () => { if (playerBalance < MIN_BET) { playerBalance = STARTING_BALANCE; nextGameIsGuided = true; updateMaxBalance(); saveGameData(); showMessage("¡Saldo restaurado! La próxima partida será guiada para ayudarte.", "success"); updateUI(); } });
-        toggleStatsBtn.addEventListener('click', () => { statsSection.classList.toggle('hidden'); toggleStatsBtn.textContent = statsSection.classList.contains('hidden') ? '⚙️' : '❌'; });
+        getFundsBtn.addEventListener('click', () => {
+             if (playerBalance < MIN_BET) { // Solo dar fondos si realmente no tiene
+                 playerBalance = STARTING_BALANCE;
+                 nextGameIsGuided = true; // Marcar la *próxima* partida como guiada
+                 updateMaxBalance(); // Actualizar saldo máximo si aplica
+                 saveGameData();
+                 showMessage("¡Saldo restaurado! La próxima partida será guiada para ayudarte a empezar.", "success"); // Mensaje informativo
+                 updateUI();
+             }
+        });
+        toggleStatsBtn.addEventListener('click', () => {
+            statsSection.classList.toggle('hidden');
+            toggleStatsBtn.textContent = statsSection.classList.contains('hidden') ? '⚙️' : '❌';
+        });
+
+        // --- Event Listener SECRETO para Modo Guiado ---
+        playerBalanceDisplayContainer.addEventListener('dblclick', () => {
+            // Solo activar si estamos en la pantalla de apuestas (ronda 0) y el juego no ha terminado
+            if (currentRound === 0 && !gameOver) {
+                nextGameIsGuided = true; // Activa el modo guiado para la siguiente partida
+                // *** NO mostrar mensaje *** Es secreto
+                console.log("Modo guiado secreto activado para la próxima partida."); // Log para desarrollador
+                // Podrías añadir un sutil efecto visual si quieres, pero la petición es que sea silencioso
+                playerBalanceDisplayContainer.style.transition = 'transform 0.1s ease-in-out';
+                playerBalanceDisplayContainer.style.transform = 'scale(1.05)';
+                setTimeout(() => { playerBalanceDisplayContainer.style.transform = 'scale(1)'; }, 100);
+            }
+        });
+
 
         // --- Event Listeners para Sincronización Slider/Input ---
          if (betSlider && betAmountInput && betSliderValue) {
-             betSlider.addEventListener('input', () => { const value = betSlider.value; betAmountInput.value = value; betSliderValue.textContent = `${value} €`; });
-             betAmountInput.addEventListener('input', () => { let value = parseInt(betAmountInput.value); const min = parseInt(betSlider.min); const max = parseInt(betSlider.max); if (isNaN(value) || value < min) { value = min; betAmountInput.value=value; } else if (value > max) { value = max; betAmountInput.value=value; } betSlider.value = value; betSliderValue.textContent = `${value} €`; });
-             betAmountInput.addEventListener('change', () => { let value = parseInt(betAmountInput.value); if(isNaN(value) || value < MIN_BET) { value = MIN_BET; betAmountInput.value=value; betSlider.value=value; betSliderValue.textContent = `${value} €`; } lastBetAmount = value; });
+             betSlider.addEventListener('input', () => {
+                 const value = betSlider.value;
+                 betAmountInput.value = value;
+                 betSliderValue.textContent = `${value} €`;
+             });
+             betAmountInput.addEventListener('input', () => {
+                 let value = parseInt(betAmountInput.value);
+                 const min = parseInt(betSlider.min);
+                 const max = parseInt(betSlider.max);
+                 // Corregir valor si está fuera de rango o no es número
+                 if (isNaN(value) || value < min) {
+                     value = min;
+                     // No forzar el valor del input inmediatamente para permitir escribir, pero sí actualizar slider/texto
+                     // betAmountInput.value = value; // Evitamos esto en 'input'
+                 } else if (value > max) {
+                     value = max;
+                    // betAmountInput.value = value; // Evitamos esto en 'input'
+                 }
+                 // Actualizar slider y texto siempre
+                 betSlider.value = value;
+                 betSliderValue.textContent = `${value} €`;
+             });
+             // Usar 'change' para la validación final y guardar el último valor apostado válido
+             betAmountInput.addEventListener('change', () => {
+                 let value = parseInt(betAmountInput.value);
+                 const min = parseInt(betSlider.min);
+                 const max = parseInt(betSlider.max);
+                 if (isNaN(value) || value < min) {
+                     value = min;
+                     betAmountInput.value = value; // Corregir input aquí
+                 } else if (value > max) {
+                     value = max;
+                     betAmountInput.value = value; // Corregir input aquí
+                 }
+                 // Sincronizar slider y texto por si acaso
+                 betSlider.value = value;
+                 betSliderValue.textContent = `${value} €`;
+                 lastBetAmount = value; // Guardar último valor válido
+             });
          }
 
         // --- Inicialización ---
