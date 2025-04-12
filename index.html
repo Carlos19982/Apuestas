@@ -91,7 +91,7 @@
         /* Estilo de la etiqueta de la carta */
         .card-label {
             position: absolute;
-            bottom: -24px; /* Ajustado: Posiciona 24px debajo del contenedor para bajarla un poco más */
+            bottom: -24px; /* Ajustado: Posiciona 24px debajo del contenedor */
             left: 0;
             right: 0;
             text-align: center;
@@ -99,8 +99,8 @@
             font-weight: 500;
             color: #e2e8f0;
             text-shadow: 1px 1px 1px #1a202c;
-            width: 100%; /* Asegura que ocupe el ancho para centrar bien */
-            pointer-events: none; /* Evita que interfiera con clics */
+            width: 100%;
+            pointer-events: none;
         }
         /* --- FIN Estilos Carta --- */
 
@@ -129,7 +129,7 @@
             padding: 1rem;
             padding-top: 4.5rem;
             position: relative;
-            overflow-y: auto;
+            overflow-y: hidden; /* Oculta el contenido vertical que desborde */
         }
 
         #ingame-stats {
@@ -221,11 +221,14 @@
             .game-container { width: auto; max-width: 95%; padding: 1rem; padding-top: 3.5rem; }
             #cards-area {
                 padding-top: 5rem;
-                height: 260px; /* Altura fija móvil */
+                /* height: 260px; */ /* Eliminado para altura automática */
+                height: auto; /* Altura automática para ajustarse al contenido */
                 width: 100%; /* Ancho completo móvil */
                 margin-left: 0;
                 margin-right: 0;
                 justify-content: center;
+                /* overflow-y: hidden; */ /* Eliminado para permitir crecimiento */
+                min-height: 260px; /* Mantenemos una altura mínima por estética */
             }
             #ingame-stats { font-size: 0.8rem; padding: 0.4rem 0.8rem; }
             #round-controls .controls-container button { font-size: 0.9rem; padding: 0.4rem 0.8rem; }
@@ -686,8 +689,8 @@
                 if (deck.length < 2) { const wR4=currentBet*CUMULATIVE_ROUND_MULTIPLIERS[4]; showMessage("Error: No quedan cartas. Cobrando R4.", "error"); potentialWinnings=wR4;playerBalance+=potentialWinnings;updateMaxBalance();endGameStatsUpdate(potentialWinnings, true);gameOver=true;guidedGameInProgress=false;saveGameData();updateUI(); return; }
 
                 const playerCard = drawCard(); const dealerCard = drawCard();
-                const playerCardElementWrapper = createCardElement(playerCard, "Jugador");
-                const dealerCardElementWrapper = createCardElement(dealerCard, "Banquero");
+                const playerCardElementWrapper = createCardElement(playerCard, "Jugador"); // Cambiado label
+                const dealerCardElementWrapper = createCardElement(dealerCard, "Banquero"); // Cambiado label
                 const playerFlipper = playerCardElementWrapper.flipper; const dealerFlipper = dealerCardElementWrapper.flipper;
                 const playerFront = playerCardElementWrapper.cardFront; const dealerFront = dealerCardElementWrapper.cardFront;
                 cardsArea.appendChild(playerCardElementWrapper); cardsArea.appendChild(dealerCardElementWrapper);
@@ -790,4 +793,4 @@
     </script>
 
 </body>
-</html>
+</ht
